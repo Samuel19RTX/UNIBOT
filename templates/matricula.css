@@ -1,0 +1,30 @@
+body { font-family: 'Helvetica', sans-serif; padding: 40px; color: #333; }
+.header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #004d99; padding-bottom: 20px; }
+.sub-header { font-size: 14px; color: #555; }
+.title { font-size: 24px; font-weight: bold; color: #004d99; margin: 10px 0; }
+h3 { margin-bottom: 5px; color: #000; }
+.info-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+.info-table td { padding: 12px; border: 1px solid #ddd; }
+.label { font-weight: bold; background-color: #f9f9f9; width: 40%; }
+.highlight { color: #004d99; font-weight: bold; text-transform: uppercase; }
+.footer { margin-top: 50px; text-align: center; font-size: 12px; color: #777; }
+/* ========================================= */
+/* 💧 MARCA DE AGUA (WATERMARK) */
+/* ========================================= */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  
+  /* 👇 PON AQUÍ LA URL DE TU LOGO ENTRE LAS COMILLAS */
+  background-image: url('https://upload.wikimedia.org/wikipedia/commons/1/10/Logo-UTB.jpg'); 
+  
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 50%; /* Ajusta el tamaño del logo (50% es la mitad de la hoja) */
+  opacity: 0.1; /* 👻 IMPORTANTE: Esto lo hace transparente (0.1 es muy suave, 1 es sólido) */
+  z-index: -1000; /* Lo manda al fondo de todo */
+}

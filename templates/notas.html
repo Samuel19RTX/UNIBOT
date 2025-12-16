@@ -1,0 +1,86 @@
+<div class="header">
+  <div class="sub-header">UNIVERSIDAD TECNICA DE BABAHOYO</div>
+  <div class="title">CERTIFICADO DE CALIFICACIONES</div>
+</div>
+
+<p>La Secretaría General certifica que el estudiante:</p>
+
+<h3>{{ nombreCompleto }}</h3>
+<p>Con C.I. <strong>{{ cedula }}</strong></p>
+
+<p>Ha obtenido el siguiente rendimiento académico en el periodo <strong>{{ periodo }}</strong>:</p>
+
+<table class="info-table">
+  <tr>
+    <td class="label">Carrera:</td>
+    <td>{{ carrera }}</td>
+  </tr>
+  <tr>
+    <td class="label">Curso / Nivel:</td>
+    <td>{{ semestre }}</td>
+  </tr>
+  <tr>
+    <td class="label">Jornada:</td>
+    <td style="text-transform: uppercase;">{{ jornada }}</td>
+  </tr>
+  <tr> 
+    <td class="label">PROMEDIO GENERAL:</td>
+    <td class="highlight">{{ promedio_general }}</td>
+  </tr>
+</table>
+
+<h4 style="margin-top: 25px; margin-bottom: 10px; border-bottom: 1px solid #ccc;">Detalle de Asignaturas</h4>
+
+<table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+  <thead>
+    <tr style="background-color: #f0f0f0;">
+      <th style="border: 1px solid #333; padding: 8px; text-align: left;">Materia</th>
+      <th style="border: 1px solid #333; padding: 8px; text-align: center;">Parcial 1</th>
+      <th style="border: 1px solid #333; padding: 8px; text-align: center;">Parcial 2</th>
+      <th style="border: 1px solid #333; padding: 8px; text-align: center;">Nota Final</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in lista_materias %}
+    <tr>
+      <td style="border: 1px solid #333; padding: 8px;">{{ item.materia }}</td>
+      <td style="border: 1px solid #333; padding: 8px; text-align: center;">{{ item.parcial_1 }}</td>
+      <td style="border: 1px solid #333; padding: 8px; text-align: center;">{{ item.parcial_2 }}</td>
+      <td style="border: 1px solid #333; padding: 8px; text-align: center; font-weight: bold;">{{ item.nota_final }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<div style="margin-top: 50px; border-top: 2px solid #333; padding-top: 20px;">
+  
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="width: 20%; vertical-align: top;">
+        <img src="https://quickchart.io/qr?text=VALIDADO_UNIBOT_{{ cedula }}_{{ fecha_emision }}&size=120&margin=0" 
+             alt="QR de Validación" 
+             style="width: 100px; height: 100px;">
+      </td>
+
+      <td style="width: 80%; vertical-align: top; padding-left: 15px;">
+        <p style="margin: 0; font-size: 14px; font-weight: bold; color: #333;">
+          DOCUMENTO FIRMADO ELECTRÓNICAMENTE
+        </p>
+        <p style="margin: 5px 0; font-size: 10px; color: #666; line-height: 1.4;">
+          La integridad de este documento puede ser verificada en la plataforma de servicios académicos de la Universidad Tecnológica. Este certificado tiene validez legal conforme a la Ley de Comercio Electrónico, Firmas y Mensajes de Datos.
+        </p>
+        
+        <div style="margin-top: 10px; font-family: 'Courier New', monospace; font-size: 9px; background-color: #f4f4f4; padding: 5px; border: 1px solid #ddd;">
+          <strong>FIRMADO POR:</strong> SECRETARÍA GENERAL - UNIBOT SYSTEM<br>
+          <strong>FECHA DE SELLADO:</strong> {{ fecha_emision }}<br>
+          <strong>HASH SHA-256:</strong> e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        </div>
+      </td>
+    </tr>
+  </table>
+
+</div>
+
+<div style="text-align: center; font-size: 9px; color: #999; margin-top: 30px;">
+  Generado por UniBot AI 🤖 | ID de Transacción: {{ cedula }}-2025
+</div>

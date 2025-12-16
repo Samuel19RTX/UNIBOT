@@ -1,0 +1,707 @@
+{
+  "name": "UNIBOT",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        48,
+        272
+      ],
+      "id": "c6f162bc-44b3-4ede-884c-79385bfab476",
+      "name": "Telegram Trigger",
+      "webhookId": "5fcb48fb-329c-401b-bb7f-b1feb19ea8da",
+      "credentials": {
+        "telegramApi": {
+          "id": "jQ8idkWYvP4kimki",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtenemos la respuesta del Agente\nconst respuesta = $input.item.json.output;\n\n// Lista de tipos de trámites válidos que van a la Base de Datos\nconst TRAMITES_VALIDOS = ['matricula', 'notas', 'asistencia', 'no_adeudar', 'practicas'];\n\ntry {\n  // 1. Buscamos si la respuesta es una ORDEN JSON\n  const jsonMatch = respuesta.match(/\\{[\\s\\S]*\\}/);\n  \n  if (jsonMatch) {\n    // Si encontramos JSON, lo convertimos a datos reales.\n    let datos = JSON.parse(jsonMatch[0]);\n\n    // 🚨 VÁLVULA DE SEGURIDAD 🚨\n    // Si el tipo NO es 'chat' Y TAMPOCO es un trámite válido...\n    if (datos.type !== 'chat' && !TRAMITES_VALIDOS.includes(datos.type)) {\n        // ...Lo forzamos a ser chat para que no rompa el SQL\n        datos.type = 'chat';\n        datos.mensaje_final = \"⚠️ Lo siento, hubo un error interno identificando tu solicitud. Por favor intenta de nuevo escribiendo 'Menu'.\";\n    }\n\n    // Retorno normal\n    if (datos.type === 'chat') {\n        return { json: { type: 'chat', mensaje_final: datos.mensaje_final } };\n    } else {\n        return { json: datos };\n    }\n\n  } else {\n    // 2. Si NO es JSON (el AI respondió solo texto plano)\n    // Lo pasamos directamente como chat para que el usuario lo lea\n    return { json: { type: 'chat', mensaje_final: respuesta } };\n  }\n\n} catch (error) {\n  // 3. Si todo falla (JSON mal formado), avisamos al usuario\n  return { json: { type: 'chat', mensaje_final: \"😵 Ups, me confundí procesando tu mensaje. ¿Podrías repetirlo?\" } };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        160
+      ],
+      "id": "2f73e7be-e98d-4477-926d-28458c232131",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.mensaje_final }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1120,
+        16
+      ],
+      "id": "0b608f62-9609-44cc-86c8-6e64a34d7d7a",
+      "name": "Send a text message1",
+      "webhookId": "7bf5b440-e228-4329-bafe-5538c3f81c38",
+      "credentials": {
+        "telegramApi": {
+          "id": "jQ8idkWYvP4kimki",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  e.*, \n  -- Esta parte es la que añade la lista de notas al estudiante\n  COALESCE(\n    (\n      SELECT json_agg(n) \n      FROM (\n        SELECT materia, parcial_1, parcial_2, nota_final \n        FROM notas_detalle \n        WHERE cedula_estudiante = e.cedula\n      ) n\n    ), \n    '[]'::json -- Esto evita errores si el alumno no tiene notas aún\n  ) as lista_materias\nFROM estudiantes e\nWHERE e.cedula = '{{ $('Switch').item.json.cedula }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1168,
+        256
+      ],
+      "id": "73e043ed-e60c-4c0c-ade1-c73965992b99",
+      "name": "Execute a SQL query",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "c0tMBxaN6B7rV2Du",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// =======================================================================\n// 1. CAPTURA Y VALIDACIÓN DE DATOS\n// =======================================================================\nconst inputItem = $input.item.json;\n\nconst tipoCertificado = inputItem.tipoCertificado; \nconst estudiante = inputItem.estudiante; \n\n// --- VALIDACIÓN DE REQUISITOS PREVIOS ---\nif (!estudiante || !estudiante.cedula) {\n    return { \n        json: { \n            es_error: true, \n            mensaje_final: `🚫 **Cédula No Encontrada**\\n\\nEl número de identificación ingresado no existe en nuestra base de datos de estudiantes.\\n\\nPor favor, **verifica el número** e inténtalo nuevamente.` \n        } \n    };\n}\n\n// =======================================================================\n// 2. CONFIGURACIÓN DINÁMICA (Datos desde Supabase)\n// =======================================================================\nconst nombreCompleto = `${estudiante.nombre} ${estudiante.apellido}`;\nconst fechaEmision = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });\nconst periodoAcademico = '2025-2026'; \n\n// 🟢 CAMBIOS AQUÍ: Asignación dinámica con valores por defecto\nconst carrera = estudiante.carrera || 'Ingeniería de Sistemas';\n// Mapeamos la columna 'curso' de la DB a la variable 'semestre' del reporte\nconst semestre = estudiante.curso || 'Nivelación'; \nconst jornada = estudiante.jornada || 'Matutina';\n\nlet payloadFinal = {};\nlet templateId = '';\nlet fileName = `Certificado_${tipoCertificado}_${estudiante.cedula}.pdf`;\n\n// 🔴 TUS IDs REALES\nconst TEMPLATE_IDS = {\n    matricula:  '80DA1667-6398-48F8-95DA-11EECE5F53F5',\n    notas:      '1742151D-D4B8-4380-B2C5-F86F20EBB800', \n    asistencia: 'E206BF1F-489F-48E7-9A60-B6C78CE41225', \n    no_adeudar: '637EA98B-878D-464A-97AC-A95EC5990900',\n    practicas:  '380F8744-119B-439D-8192-9C52D8C75137'\n};\n\n// =======================================================================\n// 3. LÓGICA DE SELECCIÓN\n// =======================================================================\n\nswitch (tipoCertificado) {\n    // CASO 1: MATRÍCULA\n    case 'matricula':\n        const estaMatriculado = estudiante.matriculado; \n        const textoMatricula = estaMatriculado\n            ? `Se encuentra legalmente matriculado para el periodo académico ${periodoAcademico} con los siguientes datos:`\n            : `Certificamos que el estudiante NO registra una matrícula activa para el periodo académico ${periodoAcademico}. Se detallan sus datos de registro:`;\n\n        payloadFinal = {\n            ...estudiante, \n            nombreCompleto, \n            fecha_emision: fechaEmision, \n            periodo: periodoAcademico,\n            // 🟢 Datos Dinámicos\n            carrera: carrera,\n            semestre: semestre,\n            jornada: jornada, // <--- Nueva variable enviada\n            \n            estado: estaMatriculado ? 'ACTIVO' : 'INACTIVO',\n            texto_detalle: textoMatricula,\n            color_estado: estaMatriculado ? 'green' : 'red'\n        };\n        templateId = TEMPLATE_IDS.matricula;\n        break;\n\n    // CASO 2: NOTAS\n    case 'notas':\n        // -------------------------------------------------------\n        // 🟢 NUEVO: Procesamiento de la lista de materias\n        // -------------------------------------------------------\n        let materias = estudiante.lista_materias;\n        // Si viene como texto JSON (a veces pasa en Postgres), lo convertimos\n        if (typeof materias === 'string') {\n            try { materias = JSON.parse(materias); } catch(e) { materias = []; }\n        }\n\n        payloadFinal = {\n            ...estudiante, \n            nombreCompleto, \n            fecha_emision: fechaEmision, \n            periodo: periodoAcademico,\n            // 🟢 Datos Dinámicos\n            carrera: carrera,\n            semestre: semestre,\n            jornada: jornada,\n            \n            promedio_general: estudiante.promedio,\n            // 👇 AQUÍ AGREGAMOS LA LISTA PARA EL PDF 👇\n            lista_materias: materias || [] \n        };\n        templateId = TEMPLATE_IDS.notas;\n        break;\n\n    // CASO 3: ASISTENCIA\n    case 'asistencia':\n        payloadFinal = {\n            ...estudiante, \n            nombreCompleto, \n            fecha_emision: fechaEmision, \n            periodo: periodoAcademico,\n            // 🟢 Datos Dinámicos\n            carrera: carrera,\n            semestre: semestre,\n            jornada: jornada,\n            \n            porcentaje_asistencia: estudiante.asistencia_porc || '95' \n        };\n        templateId = TEMPLATE_IDS.asistencia;\n        break;\n\n    // CASO 4: NO ADEUDAR\n    case 'no_adeudar':\n        const tieneDeuda = estudiante.deuda > 0;\n        const textoDeuda = tieneDeuda \n            ? `se certifica que, a la fecha de corte ${fechaEmision}, el estudiante MANTIENE VALORES PENDIENTES de pago por concepto de aranceles o matrícula.`\n            : `se certifica que, a la fecha de corte ${fechaEmision}, NO PRESENTA valores pendientes de pago por concepto de matrículas, aranceles o multas de biblioteca.`;\n\n        payloadFinal = {\n            ...estudiante, \n            nombreCompleto, \n            fecha_emision: fechaEmision, \n            cedula: estudiante.cedula,\n            // 🟢 Agregamos datos académicos por si acaso\n            carrera: carrera,\n            semestre: semestre,\n            jornada: jornada,\n\n            estado_deuda: tieneDeuda ? 'PENDIENTE DE PAGO' : 'PAZ Y SALVO',\n            texto_detalle: textoDeuda,\n            color_estado: tieneDeuda ? 'red' : 'green' \n        };\n        templateId = TEMPLATE_IDS.no_adeudar;\n        break;\n\n    // CASO 5: PRÁCTICAS\n    case 'practicas':\n        const HORAS_REQUERIDAS = 240; \n        const horasActuales = parseInt(estudiante.horas_practicas) || 0;\n        const haTerminado = horasActuales >= HORAS_REQUERIDAS;\n        const textoPracticas = haTerminado\n            ? `Ha completado satisfactoriamente el programa de prácticas pre-profesionales requerido por la malla curricular.`\n            : `Se encuentra cursando sus prácticas pre-profesionales, habiendo acreditado hasta la fecha un avance parcial respecto al requisito de graduación.`;\n\n        payloadFinal = {\n            ...estudiante, \n            nombreCompleto, \n            fecha_emision: fechaEmision, \n            cedula: estudiante.cedula,\n            // 🟢 Datos Dinámicos\n            carrera: carrera,\n            semestre: semestre,\n            jornada: jornada,\n\n            horas_practicas: horasActuales,\n            texto_detalle: textoPracticas,\n            color_estado: haTerminado ? 'green' : '#e67e22' \n        };\n        templateId = TEMPLATE_IDS.practicas;\n        break;\n    \n    default:\n        return { \n            json: { \n                es_error: true, \n                mensaje_final: `⚠️ Error interno: Tipo de certificado '${tipoCertificado}' no configurado.` \n            } \n        };\n}\n\n// =======================================================================\n// 4. RETORNO FINAL\n// =======================================================================\n\nreturn { \n    json: { \n        es_error: false, \n        payload: payloadFinal, \n        fileName: fileName, \n        templateId: templateId \n    } \n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        256
+      ],
+      "id": "adbb4f40-a124-463e-be4e-3c748152b6d2",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO solicitudes (cedula_estudiante, tipo_certificado)\nVALUES ('{{ $('Switch').item.json.cedula }}', '{{ $('Switch').item.json.type }}');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2320,
+        192
+      ],
+      "id": "795a763d-b683-4a90-a771-a638ae33f574",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "c0tMBxaN6B7rV2Du",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        464,
+        400
+      ],
+      "id": "8d9ad0d2-3692-4e9e-bcb8-1f00b4188818",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={ \n  \"estudiante\": {{ $json }},\n  \"tipoCertificado\": \"{{ $node[\"Switch\"].json.type }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1392,
+        256
+      ],
+      "id": "b3386420-9273-43f5-8574-9109153c0357",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "binaryData": true,
+        "additionalFields": {
+          "fileName": "={{ $('Code in JavaScript1').item.json.fileName }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2336,
+        496
+      ],
+      "id": "1eca1040-f2d7-4740-9d3d-3572029c1e45",
+      "name": "Send a document",
+      "webhookId": "4aaa4b43-21a0-499c-8058-0cf553c8cf25",
+      "credentials": {
+        "telegramApi": {
+          "id": "jQ8idkWYvP4kimki",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $node[\"Telegram Trigger\"].json[\"message\"][\"chat\"][\"id\"] }}",
+        "text": "={{ $json.mensaje_final }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2080,
+        48
+      ],
+      "id": "76cf37cb-4e81-485c-b21a-4a49563f996d",
+      "name": "Send a text message",
+      "webhookId": "29491b11-222c-41f2-a111-08258c2c8d1d",
+      "credentials": {
+        "telegramApi": {
+          "id": "jQ8idkWYvP4kimki",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.voice.file_id }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        288,
+        -112
+      ],
+      "id": "67d279d0-d706-4515-824c-851dbdddf26c",
+      "name": "Get a file",
+      "webhookId": "1810b97a-2e6a-4bc8-bb9d-f5dbf8fa559e",
+      "credentials": {
+        "telegramApi": {
+          "id": "jQ8idkWYvP4kimki",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "08606f7c-c99d-4bbd-a4b3-06d621f7b921",
+              "name": "message.text",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        736,
+        -112
+      ],
+      "id": "bb29bc90-4071-4baf-8d9d-3520afc328dc",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text }}",
+        "options": {
+          "systemMessage": "### ROL E IDENTIDAD 🤖\nEres **UniBot**, el asistente virtual académico de la universidad.\nTu personalidad es: **Amable, Pedagógica y Estructurada**.\n\n### 🧭 REGLAS DE NAVEGACIÓN (JERARQUÍA DE MENÚS)\n\n**1. MENÚ PRINCIPAL (Inicio):**\nCuando el usuario salude (\"Hola\", \"Menu\", \"Inicio\", \"Buenos días\") o cuando pida volver, MUESTRA ESTE MENÚ:\n\n\"¡Hola! Soy **UniBot** 🎓, tu asistente académico.\n¿En qué puedo ayudarte hoy?\n\n🗂️ **1. Trámites Rápidos** (Generar certificados aquí)\n❓ **2. Preguntas Frecuentes** (Dudas sobre procesos)\n📞 **3. Contacto Humano**\n\nEscribe el número de tu opción.\"\n\n**2. SUB-MENÚ DE CERTIFICADOS (Solo si elige opción 1):**\nSi el usuario dice \"1\", \"Trámites\" o \"Certificados\", MUESTRA ESTA LISTA:\n\n\"📂 **CENTRO DE DOCUMENTOS DIGITALES**\n¿Qué documento necesitas?\n\n📄 **1. Matrícula** (Constancia de inscripción)\n📝 **2. Notas** (Récord de calificaciones)\n🙋‍♂️ **3. Asistencia** (Registro de clases)\n🚫 **4. No Adeudar** (Paz y Salvo financiero)\n💼 **5. Prácticas** (Horas de vinculación)\"\n\n---\n\n### ⛔ REGLAS DE VALIDACIÓN ESTRICTA (¡LEER CON ATENCIÓN!)\n\n**REGLA DE NÚMEROS:**\n* Si estás en el **Menú Principal** y el usuario escribe **\"4\", \"5\", \"0\"** o cualquier número distinto de 1, 2 o 3:\n  ❌ DEBES RESPONDER: \"🚫 **Opción Inválida.** En el menú principal solo tengo opciones 1, 2 y 3. Por favor intenta de nuevo.\"\n\n* Si estás en el **Sub-menú de Certificados** y el usuario escribe \"6\", \"7\", etc:\n  ❌ DEBES RESPONDER: \"🚫 **Opción Inválida.** Por favor elige un número del 1 al 5.\"\n\n**REGLA DE TEXTO SIN SENTIDO:**\n* Si el usuario escribe algo que no tiene contexto (ej: \"patata\", \"asdfg\"):\n  ❌ DEBES RESPONDER: \"😕 No entendí eso. Por favor escribe el número de una opción del menú.\"\n\n---\n\n### ⚙️ REGLAS DE LÓGICA INTERNA (JSON vs CHAT)\n\n**CASO A: NAVEGACIÓN Y CHARLA (Respuesta Texto)**\nPara menús, saludos, errores o preguntas generales:\nResponde SIEMPRE con este JSON:\n`{\"type\": \"chat\", \"mensaje_final\": \"Tu respuesta aquí...\"}`\n\n**CASO B: PEDIR CÉDULA**\nSi el usuario elige un certificado (del 1 al 5 en el submenú) pero NO ha dado su cédula:\n`{\"type\": \"chat\", \"mensaje_final\": \"¡Entendido! Para generar ese documento, necesito tu número de **cédula**.\"}`\n\n**CASO C: EJECUTAR TRÁMITE (Solo con Cédula)**\nSOLO cuando el usuario pida un certificado específico **Y** ya tengas su número de cédula:\n* Matrícula: `{\"type\": \"matricula\", \"cedula\": \"...\"}`\n* Notas: `{\"type\": \"notas\", \"cedula\": \"...\"}`\n* Asistencia: `{\"type\": \"asistencia\", \"cedula\": \"...\"}`\n* No Adeudar: `{\"type\": \"no_adeudar\", \"cedula\": \"...\"}`\n* Prácticas: `{\"type\": \"practicas\", \"cedula\": \"...\"}`"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
+      "position": [
+        288,
+        160
+      ],
+      "id": "62115fb0-d1a2-43c3-b15e-d225c64c3eff",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.voice.file_id }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    },
+                    "id": "47d072c8-0b7f-4757-ac58-8313d5757499"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9f4ae697-df4d-4ef2-9aa9-e1670be53e3b",
+                    "leftValue": "={{ $json.message.voice.file_id }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "empty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        48,
+        -96
+      ],
+      "id": "30f069a0-a599-4f5b-b8fc-40a47632dd4b",
+      "name": "¿Es nota de voz?"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {
+          "language": "es"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        512,
+        -112
+      ],
+      "id": "cca50ee9-652a-4c1a-9dfb-c58a8c66ef94",
+      "name": "Transcribe a recording1",
+      "credentials": {
+        "openAiApi": {
+          "id": "yLQ0HIcwz2jBBQOc",
+          "name": "API-key-OpenIA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        288,
+        416
+      ],
+      "id": "6c2222a1-20bd-460c-9383-d99ce60eaead",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "yLQ0HIcwz2jBBQOc",
+          "name": "API-key-OpenIA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "chat",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "efa306f1-9ae1-4697-a7a8-8942575302d8"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "327650b5-96f2-4a87-9bd1-1a10163a8db7",
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "notas",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        912,
+        160
+      ],
+      "id": "dbce3c71-087e-4a7b-9687-facb236078d6",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.es_error }}",
+                    "rightValue": "={{ true }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    },
+                    "id": "86047c07-add8-48d9-8c4b-508c62897b04"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fc979182-af58-4b34-a43e-0f92dcd5b421",
+                    "leftValue": "={{ $json.es_error }}",
+                    "rightValue": "={{ false }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1856,
+        240
+      ],
+      "id": "bd08cc9f-f09d-4310-803c-fcb12b4e506d",
+      "name": "Switch2"
+    },
+    {
+      "parameters": {
+        "documentTemplateId": "={{ $json.templateId }}",
+        "payload": "={{ $json.payload }}"
+      },
+      "type": "n8n-nodes-pdfmonkey.pdfMonkey",
+      "typeVersion": 1,
+      "position": [
+        2096,
+        400
+      ],
+      "id": "a4695953-758e-4809-a1ab-6f90daac381a",
+      "name": "PDFMonkey1",
+      "credentials": {
+        "pdfMonkeyApi": {
+          "id": "ddG8yuH2iqD4JdfI",
+          "name": "PDFMonkey account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a file": {
+      "main": [
+        [
+          {
+            "node": "Transcribe a recording1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe a recording1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch2": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PDFMonkey1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDFMonkey1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es nota de voz?": {
+      "main": [
+        [
+          {
+            "node": "Get a file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "¿Es nota de voz?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Switch2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "fd9d709f-f02b-4799-8383-d02f113da5d6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1b3d1ea70c1d460843014b00c4a5c75c431185351523a39c6a9d227294982fe1"
+  },
+  "id": "4nT3Q70dBHIVbBTr",
+  "tags": []
+}
