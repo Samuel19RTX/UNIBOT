@@ -22,7 +22,6 @@ Su enfoque es **Multimodal y Universal**:
 2.  **Razona:** Entiende la intención del usuario sin necesidad de comandos rígidos.
 3.  **Ejecuta:** Genera documentos oficiales válidos al instante.
 
----
 
 ## ✨ Características Clave
 
@@ -42,3 +41,4 @@ Cada documento generado incluye medidas de seguridad antifraude:
 
 ### 4. Robustez y Manejo de Errores 🛡️
 El agente cuenta con reglas estrictas (Guardrails) para guiar al usuario si ingresa opciones inválidas, evitando que el sistema colapse ante entradas inesperadas.
+
