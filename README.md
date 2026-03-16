@@ -5,7 +5,7 @@
 ![Status](https://img.shields.io/badge/Status-Hackathon_Demo-success)
 ![Stack](https://img.shields.io/badge/Tech-n8n_|_Supabase_|_OpenAI_|_PDFMonkey-blue)
 
----
+
 
 ##  El Problema
 
@@ -26,7 +26,7 @@ Su enfoque es **Multimodal y Universal**:
 2.  **Razona:** Entiende la intención del usuario sin necesidad de comandos rígidos.
 3.  **Ejecuta:** Genera documentos oficiales válidos al instante.
 
----
+
 
 ##  Características Clave
 
@@ -57,7 +57,7 @@ Para prevenir la sobrecarga del servidor y garantizar una experiencia equitativa
 
 El agente cuenta con reglas estrictas (Guardrails) para guiar al usuario si ingresa opciones inválidas, evitando que el sistema colapse ante entradas inesperadas. También incluye validación de datos para avisar al usuario si la cédula ingresada no existe en la base de datos.
 
----
+
 
 ##  Stack Tecnológico
 
