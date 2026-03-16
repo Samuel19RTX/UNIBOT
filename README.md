@@ -27,7 +27,6 @@ Su enfoque es **Multimodal y Universal**:
 3.  **Ejecuta:** Genera documentos oficiales válidos al instante.
 
 
-
 ##  Características Clave
 
 ### 1. Interfaz Multimodal (Texto y Voz)
@@ -56,7 +55,6 @@ Para prevenir la sobrecarga del servidor y garantizar una experiencia equitativa
 ### 5. Manejo de Errores y Guiado de Usuario (Guardrails) 
 
 El agente cuenta con reglas estrictas (Guardrails) para guiar al usuario si ingresa opciones inválidas, evitando que el sistema colapse ante entradas inesperadas. También incluye validación de datos para avisar al usuario si la cédula ingresada no existe en la base de datos.
-
 
 
 ##  Stack Tecnológico
